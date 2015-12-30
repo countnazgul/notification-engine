@@ -1,0 +1,14 @@
+var config = {};
+
+config.qs = {};
+config.mail = {};
+
+
+config.qs.host = 'https://localhost:4242';
+
+config.mail.service = 'gmail';
+config.mail.user = 'myusername@gmail.com';
+config.mail.pass = 'my_password';
+config.mail.from = 'myusername@gmail.com';
+
+module.exports = config;
