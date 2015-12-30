@@ -3,20 +3,27 @@ var fs = require('fs');
 var request = require('request');
 var express = require('express');
 var app = express();
-var bodyParser = require('body-parser')
+var bodyParser = require('body-parser');
+var async = require('async');
+var loki = require('lokijs');
 
-app.use( bodyParser.json() );
+var db = new loki('data/loki.json', {
+  autosave: true
+});
+// var children = db.addCollection('children');
+// children.insert({name:'Sleipnir', legs: 8})
 
+app.use(bodyParser.json());
+var host = 'https://localhost:4242';
 var xrfkey = 'xrfkey=abcdefghijklmnop';
 var mainOptions = {
   rejectUnauthorized: false,
-  url: 'https://localhost:4242',
   //port: 4242,
   //method: 'GET',
   headers: {
     'x-qlik-xrfkey': 'abcdefghijklmnop',
-    'X-Qlik-User': 'UserDirectory= Internal; UserId= sa_repository'
-    //'Content-Type': 'application/json'
+    'X-Qlik-User': 'UserDirectory= Internal; UserId= sa_repository',
+    'Content-Type': 'application/json'
   },
   agentOptions: {
     key: fs.readFileSync("C:\\CertStore\\instance-2\\client_key.pem"),
@@ -29,18 +36,116 @@ app.get('/', function(req, res) {
 });
 
 app.post('/change', function(req, res) {
-  console.log(req.body)
-  //res.send('called')
+  var changes = req.body;
+
+  async.each(changes, function(change, callback) {
+      if (change.objectType == 'ExecutionResult') {
+        Generate(change.objectID, function(msg) {
+          console.log(msg)
+          callback();
+        })
+      } else {
+        console.log('Event is not for ExecutionResult');
+        callback();
+      }
+    },
+    function(err) {
+
+    });
 });
+
+app.get('/reloadtasks', function(req, res) {
+  GetReloadTasksFull(function(reloadtask) {
+    res.send(reloadtask)
+  })
+});
+
+function GetReloadTasksFull(callback) {
+  MakeRequest('GET', '/qrs/reloadtask/full?', '', function(reloadtasks) {
+    callback(reloadtasks)
+  })
+}
+
+function Generate(executionresultid, callback) {
+  GetExecutionResult(executionresultid, function(executionresult) {
+
+    executionresult = JSON.parse(executionresult);
+    var reloadTaskName = '';
+    var status = executionresult.status; // 7--> Success; 8--> Fail
+    var scriptLogAvailable = executionresult.scriptLogAvailable; // true or false
+
+    GetReloadTask(executionresult.taskID, function(reloadtask) {
+      reloadtask = JSON.parse(reloadtask);
+      reloadTaskName = reloadtask.name;
+
+      if (status == 8) {
+        if (scriptLogAvailable == true) {
+          GetReloadTaskScript(reloadtask.id, reloadtask.operational.lastExecutionResult.fileReferenceID, function(reloadtaskscript) {
+            reloadtaskscript = JSON.parse(reloadtaskscript);
+
+            DownloadScript(reloadtaskscript.value, reloadTaskName, function(script) {
+              fs.writeFile('./temp/' + executionresultid + '.txt', script, function(err) {
+                SendMail(function() {
+                  callback('task failed! log generated and mail send')
+                })
+              })
+            })
+          })
+        } else {
+          callback('task failed! log NOT available and mail send');
+        }
+      } else {
+        callback('task completed successfuly and mail send')
+      }
+    })
+  })
+}
+
+function GetExecutionResult(executionresultid, callback) {
+  MakeRequest('GET', '/qrs/executionresult/' + executionresultid + '?', '', function(executionresult) {
+    callback(executionresult);
+  })
+}
+
+function GetExecutionResultFull(callback) {
+  MakeRequest('GET', '/qrs/executionresult/full?', '', function(executionresult) {
+    callback(executionresult);
+  })
+}
+
+function GetReloadTask(reloadtaskid, callback) {
+  MakeRequest('GET', '/qrs/reloadtask/' + reloadtaskid + '?', '', function(reloadtask) {
+    callback(reloadtask)
+  })
+}
+
+function GetReloadTaskScript(reloadtaskid, fileReferenceId, callback) {
+  //fileReferenceID
+  MakeRequest('GET', '/qrs/reloadtask/' + reloadtaskid + '/scriptlog?fileReferenceId=' + fileReferenceId + '&', '', function(reloadtask) {
+    callback(reloadtask)
+  })
+}
+
+function DownloadScript(value, taskname, callback) {
+  //fileReferenceID
+  MakeRequest('GET', '/qrs/download/reloadtask/' + value + '/' + taskname + '.log&', '', function(script) {
+    callback(script)
+  })
+}
+
+function SendMail(callback) {
+  callback();
+}
 
 function MakeRequest(method, path, body, callback) {
   var options = mainOptions;
   options.method = method;
-  options.url = options.url + path + xrfkey;
-  if(method === 'POST') {
-      options.body = body;
+  options.url = host + path + xrfkey;
+
+  if (method === 'POST') {
+    options.body = body;
   }
-//console.log(options)
+
   request(options, function(err, data) {
     if (err) {
       callback('err:' + err)
@@ -49,6 +154,11 @@ function MakeRequest(method, path, body, callback) {
     }
   })
 }
+
+// MakeRequest('GET', '/qrs/task/full?', '', function(extensions) {
+//   ///qrs/download/reloadtask/75b96854-9dec-4ee1-a947-c08ed2f51833/Reload%20Taxi%20Data.log
+//   console.log(extensions)
+// })
 
 // MakeRequest('GET', '/qrs/ReloadTask/c09301eb-e472-46e6-a950-1fce948a2c1e/scriptlog?fileReferenceId=3cd1fc9a-e6a6-453b-81d2-699e17338992&', '', function(extensions) {
 //   ///qrs/download/reloadtask/75b96854-9dec-4ee1-a947-c08ed2f51833/Reload%20Taxi%20Data.log
@@ -64,11 +174,11 @@ function MakeRequest(method, path, body, callback) {
 // })
 
 //POST /qrs/notification?name=ExecutionResult&filter=status%20eq%20FinishedFail&changetype=Update
-// MakeRequest('POST', '/qrs/notification?name=ExecutionResult&filter=status%20eq%20FinishedFail&changetype=Update&', '"http://localhost:3000/change"', function(extensions) {
+// MakeRequest('POST', '/qrs/notification?name=ExecutionResult&changetype=Update&filter=status%20eq%20FinishedFail%20or%20status%20eq%20FinishedSuccess&', '"http://localhost:3000/change"', function(extensions) {
 //   console.log(extensions)
 // })
-
-// MakeRequest('DELETE', '/qrs/notification?handle=7ad490a7-2994-4086-8d99-291995ea473b&', '', function(extensions) {
+//
+// MakeRequest('DELETE', '/qrs/notification?handle=045f4af8-9be5-4581-83db-1ac7c599f964&', '', function(extensions) {
 //   console.log(extensions)
 // })
 
@@ -77,6 +187,55 @@ function MakeRequest(method, path, body, callback) {
 // MakeRequest('GET', '/qrs/notification/changes?since=2014-11-20T07:11:43.999Z&types=Stream&', function(extensions) {
 //   console.log(extensions)
 // })
+
+/*
+// Temp web methods
+app.get('/executionresult/:executionresultid', function(req, res) {
+  var executionresultid = req.params.executionresultid;
+
+  GetExecutionResult(executionresultid, function(executionresult) {
+    var status = executionresult.status; // 7--> Success; 8--> Fail
+    var scriptLogAvailable = executionresult.scriptLogAvailable; // true or false
+    res.send(executionresult)
+  })
+});
+
+app.get('/executionresultfull', function(req, res) {
+  GetExecutionResultFull(function(executionresult) {
+    res.send(executionresult)
+  })
+});
+
+app.get('/reloadtask/:reloadtaskid', function(req, res) {
+  var reloadtaskid = req.params.reloadtaskid;
+
+  GetReloadTask(reloadtaskid, function(reloadtask) {
+    res.send(reloadtask)
+  })
+});
+
+app.get('/reloadtaskscript/:reloadtaskid/:fileid', function(req, res) {
+  var reloadtaskid = req.params.reloadtaskid;
+  var fileid = req.params.fileid;
+
+  GetReloadTaskScript(reloadtaskid, fileid, function(reloadtask) {
+    res.send(reloadtask)
+  })
+});
+
+app.get('/downloadscript/:value/:taskname', function(req, res) {
+  var value = req.params.value;
+  var taskname = req.params.taskname;
+
+  DownloadScript(value, taskname, function(script) {
+    console.log(script)
+    fs.writeFile('./temp/script.txt', script, function(err) {
+      res.send('done')
+    })
+  })
+});
+
+*/
 
 
 var server = app.listen(3000, function() {
