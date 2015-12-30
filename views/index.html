@@ -1,0 +1,65 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+    <head>
+        <title></title>
+        <style>
+            #left {
+                width: 20%;
+                float: left;
+                /*background-color: green;*/
+            }
+
+            #right {
+                margin-left: 20%; /* Change this to whatever the width of your left column is*/
+                /*background-color: red; height: 10px;*/
+            }
+
+            .input-field-div {
+                display:inline-block; 
+            }        
+
+        </style>
+        <script src="js/jquery-2.1.4.min.js"></script>
+        <script src="js/script.js"></script>
+    </head>
+    <body>
+        <div id="container">
+            <div id="left">
+                <ul>
+                    {% for task in tasks %}
+                    <li value="{{ task.id }}" class="task">{{ task.taskname }}</li>
+                    {% endfor %}     
+                </ul>
+            </div>
+            <div id="right">
+                <div id="states">
+                    <div class="input-field-div">
+                        Success <br/>
+                        <textarea id="success" cols="40" rows="15" ></textarea>
+                    </div>          
+                    <div class="input-field-div">
+                        Fail <br/>
+                        <textarea id="fail" cols="40" rows="15" ></textarea>
+                    </div>  <br/>
+                    <button id="save">Save</button>
+
+                </div>
+            </div>
+        </div>    
+        <div id="notifications">
+            {% if !notifications %}
+                <button id="notificationcreate">Create notification</button>
+            {% endif %}
+            
+            {% if notifications %}
+                <ul>                            
+                {% for notification in notifications %}
+                    <li>{{ notification.notificationid }} <button class="notificationdelete" value="{{ notification.notificationid }}">Delete</button> </li>
+                {% endfor %}   
+                </ul>
+            {% endif %}
+            
+        </div>
+
+    </body>
+</html>

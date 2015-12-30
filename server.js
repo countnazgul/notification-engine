@@ -5,16 +5,29 @@ var express = require('express');
 var app = express();
 var bodyParser = require('body-parser');
 var async = require('async');
-var loki = require('lokijs');
+var swig = require('swig');
+var cons = require('consolidate');
+var nodemailer = require('nodemailer');
+var config = require('./config');
 
-var db = new loki('data/loki.json', {
-  autosave: true
+var Datastore = require('nedb');
+var tasksdb = new Datastore({ filename: 'data/tasks.db', autoload: true });
+tasksdb.loadDatabase(function (err) {    // Callback is optional
+  console.log('tasks db is loaded');
 });
-// var children = db.addCollection('children');
-// children.insert({name:'Sleipnir', legs: 8})
+
+var notificationsdb = new Datastore({ filename: 'data/notifications.db', autoload: true });
+notificationsdb.loadDatabase(function (err) {    // Callback is optional
+  console.log('notifications db is loaded');
+});
 
 app.use(bodyParser.json());
-var host = 'https://localhost:4242';
+app.engine('html', cons.swig);
+app.set('view engine', 'html');
+app.set('views', __dirname + '/views');
+app.use(express.static('public'));
+
+var host = config.qs.host;
 var xrfkey = 'xrfkey=abcdefghijklmnop';
 var mainOptions = {
   rejectUnauthorized: false,
@@ -26,13 +39,24 @@ var mainOptions = {
     'Content-Type': 'application/json'
   },
   agentOptions: {
-    key: fs.readFileSync("C:\\CertStore\\instance-2\\client_key.pem"),
-    cert: fs.readFileSync("C:\\CertStore\\instance-2\\client.pem")
+    //key: fs.readFileSync("C:\\CertStore\\instance-2\\client_key.pem"),
+    //cert: fs.readFileSync("C:\\CertStore\\instance-2\\client.pem")
   }
 };
 
+var availableTasks = [
+    {"id": "1", "taskname": "task1"},
+    {"id": "2", "taskname": "task2"},
+    {"id": "3", "taskname": "task3"},
+    {"id": "4", "taskname": "task4"},
+];
+
+//  notificationsdb.insert( { notificationid : 'notification1', filter: 'filter1', url: 'http://localhost/3000/change' }, function(err, notification) {
+//                   console.log(notification);                 
+//               } );
+
 app.get('/', function(req, res) {
-  res.render('index', { /* template locals context */ });
+  res.send('Hello World!')
 });
 
 app.post('/change', function(req, res) {
@@ -55,10 +79,72 @@ app.post('/change', function(req, res) {
 });
 
 app.get('/reloadtasks', function(req, res) {
-  GetReloadTasksFull(function(reloadtask) {
-    res.send(reloadtask)
-  })
+//   GetReloadTasksFull(function(reloadtask) {
+//     res.send(reloadtask)
+//   })
+    
+  async.each(availableTasks, function(availabletask, callback) {
+      tasksdb.findOne( {'taskId': availabletask.id.toString()}, function(err, task) {
+        //console.log(task)
+          if(task == null) {
+              tasksdb.insert( { taskId : availabletask.id, name: availabletask.taskname, success: "", fail:"" }, function(err, newTask) {
+                  console.log(availabletask.id + ' inserted');
+                callback();                     
+              });
+          } else {
+           callback();   
+          }      
+      })    
+    },
+    function(err) {
+      notificationsdb.find({}, function (err, notifications) {
+          if(notifications.length > 0) {
+              res.render('index', { tasks: availableTasks, notifications: notifications });  
+          } else {
+              res.render('index', { tasks: availableTasks });  
+          }
+      })                    
+    });    
 });
+
+app.get('/tasksdetails/:taskid', function(req, res) {
+    var taskId = req.params.taskid;
+    
+    tasksdb.findOne( {'taskId': taskId}, function(err, task) {        
+        res.send(task)
+    })    
+});
+
+app.post('/tasksdetailssave', function(req, res) {
+    tasksdb.update({ 'taskId': req.body.taskid }, { $set: { success: req.body.success, fail: req.body.fail } }, { multi: false }, function (err, numReplaced) {
+        res.send( {replaced: numReplaced });
+    });        
+});
+
+app.get('/notifications', function(req, res) {
+  notificationsdb.find({}, function (err, notifications) {
+     res.send(notifications)
+   });
+})
+
+app.get('/notificationdelete/:notificationid', function(req, res) {
+    var notificationid = req.params.notificationid;
+    //notificationsdb.remove({ notificationid: notificationid}, { multi: false }, function (err, numRemoved) {        
+      //console.log(numRemoved)
+      //res.send(numRemoved)
+      res.send({deleted: 1} )
+    //});    
+    
+//   notificationsdb.find({}, function (err, notifications) {
+//      res.send(notifications)
+//    });
+})
+
+app.get('/notificationcreate', function(req, res) {
+    notificationsdb.insert( { notificationid : 'notification1', filter: '/qrs/notification...etc' }, function(err, notification) {
+        res.send(notification.notificationid)
+    });
+})
 
 function GetReloadTasksFull(callback) {
   MakeRequest('GET', '/qrs/reloadtask/full?', '', function(reloadtasks) {
@@ -133,8 +219,40 @@ function DownloadScript(value, taskname, callback) {
   })
 }
 
-function SendMail(callback) {
-  callback();
+if(1 === 0) {
+    fs.readFile('data/notifications.db',function(err, content) {
+        SendMail('notifications.db', content.toString(), function(msg) {
+            console.log(msg)
+        })
+    })
+}
+
+function SendMail(filename, filecontent,callback) {
+    
+    var transporter = nodemailer.createTransport({
+        service: config.mail.service,
+        auth: {
+            user: config.mail.user,
+            pass: config.mail.pass
+        }
+    }, {
+        // default values for sendMail method
+        from: config.mail.from,
+        headers: {
+            'My-Awesome-Header': '123'
+        }, attachments: [ {   // utf-8 string as an attachment
+        filename: filename,
+        content: filecontent
+    }]
+    });
+    transporter.sendMail({
+        to: 'stefan.stoichev@gmail.com',
+        subject: 'hello',
+        text: 'hello world!'
+    }, function() {
+        callback('mail send')
+    });    
+  
 }
 
 function MakeRequest(method, path, body, callback) {
@@ -155,6 +273,7 @@ function MakeRequest(method, path, body, callback) {
   })
 }
 
+/*
 // MakeRequest('GET', '/qrs/task/full?', '', function(extensions) {
 //   ///qrs/download/reloadtask/75b96854-9dec-4ee1-a947-c08ed2f51833/Reload%20Taxi%20Data.log
 //   console.log(extensions)
@@ -187,6 +306,7 @@ function MakeRequest(method, path, body, callback) {
 // MakeRequest('GET', '/qrs/notification/changes?since=2014-11-20T07:11:43.999Z&types=Stream&', function(extensions) {
 //   console.log(extensions)
 // })
+*/
 
 /*
 // Temp web methods
