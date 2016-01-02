@@ -1,33 +1,34 @@
 $( document ).ready(function() {
     $("#states").hide();
-    
+
 //     $.get("notifications", function(data, notifications){
-        
+
 //     })
-    
+
     $('.task').on('click', function() {
-        var taskId = $(this).val();
-        $.get("tasksdetails/" + $(this).val(), function(data, status){
-            
+        var taskId = $(this).data('value');
+        console.log(taskId)
+        $.get("tasksdetails/" + taskId, function(data, status){
+
             $('#success').val("");
             $('#fail').val("");
-            
+
             $('#save').attr('value', taskId);
             $('#success').val(data.success);
             $('#fail').val(data.fail);
-            
+
             if($('#states').is(":visible") == false) {
                 $("#states").toggle();
             }
-        });                
+        });
     })
-    
+
     $('#save').on('click', function() {
-        
+
         $.ajax({
-            url: 'tasksdetailssave', 
-            type: 'POST', 
-            contentType: 'application/json', 
+            url: 'tasksdetailssave',
+            type: 'POST',
+            contentType: 'application/json',
             data: JSON.stringify( {
                 taskid: $(this).attr("value"),
                 success: $('#success').val(),
@@ -39,16 +40,16 @@ $( document ).ready(function() {
             error: function(err) {
                 cnosole.log(err)
             }
-        })    
+        })
     })
-    
+
     $('#notificationcreate').on('click', function() {
         var _this = $(this);
         $.get("notificationcreate", function(data, status){
             $(_this).remove();
-        })        
+        })
     });
-    
+
     $('.notificationdelete').on('click', function() {
         var _this = $(this);
         $.get("notificationdelete" + '/' + $(this).val(), function(data, status){
@@ -57,5 +58,5 @@ $( document ).ready(function() {
             }
         })
     });
-    
+
 });

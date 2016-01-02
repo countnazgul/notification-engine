@@ -1,0 +1,35 @@
+{
+  "name": "Qlik Sense notification engine",
+  "version": "0.3.0",
+  "description": "Send mails when Qlik Sense task finish reload (from the Scheduler Service)",
+  "keywords": [
+    "qlik",
+    "sense",
+    "notification",
+    "scheduler"
+  ],
+  "author": "Stefan Stoichev",
+  "license": "Unlicense",
+  "homepage": "https://github.com/countnazgul/notification-engine",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/countnazgul/notification-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/countnazgul/notification-engine/issues"
+  },
+  "dependencies": {
+    "async": "1.5.0",
+    "body-parser": "1.14.2",
+    "consolidate": "0.13.1",
+    "express": "4.13.3",
+    "morgan": "1.6.1",
+    "nedb": "1.5.1",
+    "nodemailer": "1.11.0",
+    "nodemailer-sendgrid-transport": "0.2.0",
+    "passport": "0.3.2",
+    "passport-http": "0.3.0",
+    "request": "2.67.0",
+    "swig": "1.4.2",
+  }
+}

@@ -6,9 +6,17 @@ config.mail = {};
 
 config.qs.host = 'https://localhost:4242';
 
-config.mail.service = 'gmail';
-config.mail.user = 'myusername@gmail.com';
+config.mail.host = 'smtp.mysmtp.com';
+config.mail.port = 25;
+config.mail.user = 'myusername';
 config.mail.pass = 'my_password';
 config.mail.from = 'myusername@gmail.com';
+config.mail.ssl = false;
+config.mail.tls = ''; // for example if using outlook.com as smtp server: SSLv3
+config.mail.subjectFail = 'Task "{{taskname}}" failed to reload';
+config.mail.subjectSuccess = 'Task "{{taskname}}" successfuly to reload';
+config.mail.bodyFail = '<b>"{{taskname}}" failed</b> <br> Find the execution script attached';
+config.mail.bodySuccess = '<b>"{{taskname}}" was successfuly reloaded!</b> <br>This is an automated email. Please do not reply to it.';
+config.mail.includefailscript = true; // should the QS reload script to be attached when task is failed to reload
 
 module.exports = config;
