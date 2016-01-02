@@ -1,8 +1,11 @@
 var config = {};
 
+config.main = {};
 config.qs = {};
 config.mail = {};
 
+config.main.port = 3000;
+config.main.calledurl = 'http://localhost';
 
 config.qs.host = 'https://localhost:4242';
 
